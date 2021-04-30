@@ -16,7 +16,6 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken, OutstandingToken
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
 from django.utils.translation import gettext_lazy as _
 
 from allauth.socialaccount.models import SocialAccount
@@ -51,6 +50,9 @@ def google_callback(request):
     if error is not None:
         raise JSONDecodeError(error)
     access_token = token_req_json.get('access_token')
+    """
+    Email Request
+    """
     email_req = requests.get(
         f"https://www.googleapis.com/oauth2/v1/tokeninfo?access_token={access_token}")
     email_req_status = email_req.status_code
@@ -58,7 +60,9 @@ def google_callback(request):
         return JsonResponse({'err_msg': 'failed to get email'}, status=status.HTTP_400_BAD_REQUEST)
     email_req_json = email_req.json()
     email = email_req_json.get('email')
-
+    """
+    Signup or Signin Request
+    """
     user = User.objects.get(email=email)
     if(user):
         # 기존에 가입된 유저의 Provider가 google이 아니면 에러 발생, 맞으면 로그인
@@ -68,7 +72,6 @@ def google_callback(request):
             return JsonResponse({'err_msg': 'email exists but not social user'}, status=status.HTTP_400_BAD_REQUEST)
         if social_user.provider != 'google':
             return JsonResponse({'err_msg': 'no matching social type'}, status=status.HTTP_400_NOT_FOUND)
-
         # 기존에 Google로 가입된 유저
         data = {'access_token': access_token, 'code': code}
         accept = requests.post(
