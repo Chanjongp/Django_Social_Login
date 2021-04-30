@@ -10,7 +10,6 @@ import requests
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from django.http import JsonResponse
 from .models import User
-
 import json
 from json.decoder import JSONDecodeError
 from rest_framework import status
@@ -21,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from django.utils.translation import gettext_lazy as _
 
+from allauth.socialaccount.models import SocialAccount
 BASE_URL = 'http://localhost:8000/'
 GOOGLE_CALLBACK_URI = BASE_URL + 'accounts/google/callback/'
 KAKAO_CALLBACK_URI = BASE_URL + 'accounts/kakao/callback/'
@@ -60,28 +60,30 @@ def google_callback(request):
         f"https://www.googleapis.com/oauth2/v1/tokeninfo?access_token={access_token}")
     email_req_status = email_req.status_code
     if email_req_status != 200:
-        return JsonResponse({'detail': 'failed to get email'}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse({'err_msg': 'failed to get email'}, status=status.HTTP_400_BAD_REQUEST)
     email_req_json = email_req.json()
     email = email_req_json.get('email')
 
-    user = User.objects.filter(email=email)
+    user = User.objects.get(email=email)
     if(user):
-        # 기존에 가입된 유저의 Social Type이 google이 아니면 에러 발생, 맞으면 로그인
+        # 기존에 가입된 유저의 Provider가 google이 아니면 에러 발생, 맞으면 로그인
         # 다른 SNS로 가입된 유저
-        user = user[0]
-        if(user.social_type != 'google'):
-            return JsonResponse({'detail': 'no matching social type'}, status=status.HTTP_404_NOT_FOUND)
-        else:
-            # 기존에 Google로 가입된 유저
-            data = {'access_token': access_token}
-            accept = requests.post(
-                f"{BASE_URL}user/google/login/finish/", data=data)
-            accept_status = accept.status_code
-            if accept_status != 200:
-                return JsonResponse({'detail': 'failed to signin'}, status=accept_status)
-            accept_json = accept.json()
-            accept_json.pop('user', None)
-            return JsonResponse(accept_json)
+        social_user = SocialAccount.objects.get(user=user)
+        if social_user is None:
+            return JsonResponse({'err_msg': 'email exists but not social user'}, status=status.HTTP_400_BAD_REQUEST)
+        if social_user.provider != 'google':
+            return JsonResponse({'err_msg': 'no matching social type'}, status=status.HTTP_400_NOT_FOUND)
+
+        # 기존에 Google로 가입된 유저
+        data = {'access_token': access_token, 'code': code}
+        accept = requests.post(
+            f"{BASE_URL}accounts/google/login/finish/", data=data)
+        accept_status = accept.status_code
+        if accept_status != 200:
+            return JsonResponse({'err_msg': 'failed to signin'}, status=accept_status)
+        accept_json = accept.json()
+        accept_json.pop('user', None)
+        return JsonResponse(accept_json)
     else:
         # 기존에 가입된 유저가 없으면 새로 가입
         data = {'access_token': access_token, 'code': code}
@@ -89,7 +91,7 @@ def google_callback(request):
             f"{BASE_URL}user/google/login/finish/", data=data)
         accept_status = accept.status_code
         if accept_status != 200:
-            return JsonResponse({'detail': 'failed to signup'}, status=accept_status)
+            return JsonResponse({'err_msg': 'failed to signup'}, status=accept_status)
         accept_json = accept.json()
         accept_json.pop('user', None)
         User.objects.filter(email=email).update(
@@ -139,7 +141,7 @@ def kakao_callback(request):
         error = accept_json.get("error")
         if error is not None:
             raise KaKaoException()
-        return JsonResponse(accept_json)
+        return Response(accept_json)
     except KaKaoException:
         return redirect('/error')
 
@@ -183,7 +185,7 @@ def github_callback(request):
         error = accept_json.get("error")
         if error is not None:
             raise GithubException()
-        return JsonResponse(accept_json)
+        return Response(accept_json)
     except GithubException:
         return redirect('/error')
 
