@@ -1,6 +1,5 @@
 from django.shortcuts import redirect
 from django.conf import settings
-# from f.registration.views import SocialLoginView
 from dj_rest_auth.registration.views import SocialLoginView
 from allauth.socialaccount.providers.google import views as google_view
 from allauth.socialaccount.providers.kakao import views as kakao_view
@@ -27,10 +26,6 @@ KAKAO_CALLBACK_URI = BASE_URL + 'accounts/kakao/callback/'
 GITHUB_CALLBACK_URI = BASE_URL + 'accounts/github/callback/'
 
 state = getattr(settings, 'STATE')
-
-
-class GooGleException(Exception):
-    pass
 
 
 def google_login(request):
