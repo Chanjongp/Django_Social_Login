@@ -1,4 +1,3 @@
-from allauth.socialaccount.providers import github
 from django.shortcuts import redirect
 from django.conf import settings
 # from f.registration.views import SocialLoginView
@@ -8,12 +7,26 @@ from allauth.socialaccount.providers.kakao import views as kakao_view
 from allauth.socialaccount.providers.github import views as github_view
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 import requests
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from django.http import JsonResponse
+from .models import User
+
+import json
+from json.decoder import JSONDecodeError
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken, OutstandingToken
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from django.utils.translation import gettext_lazy as _
 
 BASE_URL = 'http://localhost:8000/'
 GOOGLE_CALLBACK_URI = BASE_URL + 'accounts/google/callback/'
 KAKAO_CALLBACK_URI = BASE_URL + 'accounts/kakao/callback/'
 GITHUB_CALLBACK_URI = BASE_URL + 'accounts/github/callback/'
+
+state = getattr(settings, 'STATE')
 
 
 class GooGleException(Exception):
@@ -30,33 +43,58 @@ def google_login(request):
 
 
 def google_callback(request):
-    try:
-        client_id = getattr(settings, "SOCIAL_AUTH_GOOGLE_CLIENT_ID")
-        client_secret = getattr(settings, "SOCIAL_AUTH_GOOGLE_SECRET")
-        code = request.GET.get('code')
-        """
-        Access Token Request
-        """
-        token_request = requests.post(
-            f"https://oauth2.googleapis.com/token?client_id={client_id}&client_secret={client_secret}&code={code}&grant_type=authorization_code&redirect_uri={GOOGLE_CALLBACK_URI}")
-        token_request_json = token_request.json()
-        error = token_request_json.get("error")
-        if error is not None:
-            return GooGleException()
-        access_token = token_request_json.get('access_token')
-        """
-        Login Request
-        """
+    client_id = getattr(settings, "SOCIAL_AUTH_GOOGLE_CLIENT_ID")
+    client_secret = getattr(settings, "SOCIAL_AUTH_GOOGLE_SECRET")
+    code = request.GET.get('code')
+    """
+    Access Token Request
+    """
+    token_req = requests.post(
+        f"https://oauth2.googleapis.com/token?client_id={client_id}&client_secret={client_secret}&code={code}&grant_type=authorization_code&redirect_uri={GOOGLE_CALLBACK_URI}&state={state}")
+    token_req_json = token_req.json()
+    error = token_req_json.get("error")
+    if error is not None:
+        raise JSONDecodeError(error)
+    access_token = token_req_json.get('access_token')
+    email_req = requests.get(
+        f"https://www.googleapis.com/oauth2/v1/tokeninfo?access_token={access_token}")
+    email_req_status = email_req.status_code
+    if email_req_status != 200:
+        return JsonResponse({'detail': 'failed to get email'}, status=status.HTTP_400_BAD_REQUEST)
+    email_req_json = email_req.json()
+    email = email_req_json.get('email')
+
+    user = User.objects.filter(email=email)
+    if(user):
+        # 기존에 가입된 유저의 Social Type이 google이 아니면 에러 발생, 맞으면 로그인
+        # 다른 SNS로 가입된 유저
+        user = user[0]
+        if(user.social_type != 'google'):
+            return JsonResponse({'detail': 'no matching social type'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            # 기존에 Google로 가입된 유저
+            data = {'access_token': access_token}
+            accept = requests.post(
+                f"{BASE_URL}user/google/login/finish/", data=data)
+            accept_status = accept.status_code
+            if accept_status != 200:
+                return JsonResponse({'detail': 'failed to signin'}, status=accept_status)
+            accept_json = accept.json()
+            accept_json.pop('user', None)
+            return JsonResponse(accept_json)
+    else:
+        # 기존에 가입된 유저가 없으면 새로 가입
         data = {'access_token': access_token, 'code': code}
         accept = requests.post(
-            f"{BASE_URL}accounts/google/login/finish/", data=data)
+            f"{BASE_URL}user/google/login/finish/", data=data)
+        accept_status = accept.status_code
+        if accept_status != 200:
+            return JsonResponse({'detail': 'failed to signup'}, status=accept_status)
         accept_json = accept.json()
-        error = accept_json.get("error")
-        if error is not None:
-            return GooGleException()
-        return JsonResponse(accept_json)
-    except GooGleException:
-        return redirect('/error')
+        accept_json.pop('user', None)
+        User.objects.filter(email=email).update(
+            email=email, social_type='google')
+        return JsonResponse(data)
 
 
 class GoogleLogin(SocialLoginView):
