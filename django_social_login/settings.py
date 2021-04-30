@@ -15,6 +15,7 @@ import os
 import json
 import sys
 
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -47,15 +48,17 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    'django.contrib.sites',
-    'accounts',
-    #django-rest-auth
-    'rest_framework',
-    'rest_framework.authtoken',
-    'rest_auth',
 
-    #django-allauth
+    'django.contrib.sites',
+    # my app
+    'accounts',
+    # django rest framework
+    'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
+    # dj-rest-auth
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
+    # django-allauth
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -70,7 +73,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.SessionAuthentication',
-        'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
+        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
     ),
 }
 
@@ -110,14 +113,6 @@ WSGI_APPLICATION = 'django_social_login.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/3.1/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
-
 
 # Password validation
 # https://docs.djangoproject.com/en/3.1/ref/settings/#auth-password-validators
