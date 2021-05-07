@@ -92,7 +92,7 @@ def google_callback(request):
             return JsonResponse({'err_msg': 'failed to signup'}, status=accept_status)
         accept_json = accept.json()
         accept_json.pop('user', None)
-        return JsonResponse(data)
+        return JsonResponse(accept_json)
 
 
 class GoogleLogin(SocialLoginView):
@@ -113,33 +113,30 @@ def kakao_login(request):
 
 
 def kakao_callback(request):
-    try:
-        rest_api_key = getattr(settings, 'KAKAO_REST_API_KEY')
-        redirect_uri = KAKAO_CALLBACK_URI
-        code = request.GET.get("code")
-        token_request = requests.get(
-            f"https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id={rest_api_key}&redirect_uri={redirect_uri}&code={code}")
-        token_request_json = token_request.json()
-        error = token_request_json.get("error")
-        if error is not None:
-            raise KaKaoException()
-        access_token = token_request_json.get("access_token")
-        # profile_request = requests.get("https://kapi.kakao.com/v2/user/me", headers={"Authorization" : f"Bearer {access_token}"})
-        # profile_json = profile_request.json()
-        # kakao_account = profile_json.get('kakao_account')
-        # profile = kakao_account.get("profile")
-        # nickname = profile.get("nickname")
-        data = {'access_token': access_token, 'code': code}
-        accept = requests.post(
-            f"{BASE_URL}accounts/kakao/login/finish/", data=data
-        )
-        accept_json = accept.json()
-        error = accept_json.get("error")
-        if error is not None:
-            raise KaKaoException()
-        return Response(accept_json)
-    except KaKaoException:
-        return redirect('/error')
+    rest_api_key = getattr(settings, 'KAKAO_REST_API_KEY')
+    code = request.GET.get("code")
+    redirect_uri = KAKAO_CALLBACK_URI
+    token_req = requests.get(
+        f"https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id={rest_api_key}&redirect_uri={redirect_uri}&code={code}")
+    token_req_json = token_req.json()
+    error = token_req_json.get("error")
+    if error is not None:
+        raise JSONDecodeError(error)
+    access_token = token_req.get("access_token")
+    # profile_request = requests.get("https://kapi.kakao.com/v2/user/me", headers={"Authorization" : f"Bearer {access_token}"})
+    # profile_json = profile_request.json()
+    # kakao_account = profile_json.get('kakao_account')
+    # profile = kakao_account.get("profile")
+    # nickname = profile.get("nickname")
+    data = {'access_token': access_token, 'code': code}
+    accept = requests.post(
+        f"{BASE_URL}accounts/kakao/login/finish/", data=data
+    )
+    accept_json = accept.json()
+    error = accept_json.get("error")
+    if error is not None:
+        raise KaKaoException()
+    return Response(accept_json)
 
 
 class KakaoLogin(SocialLoginView):
