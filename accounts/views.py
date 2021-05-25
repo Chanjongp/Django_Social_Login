@@ -198,8 +198,6 @@ def github_callback(request):
     if error is not None:
         raise JSONDecodeError(error)
     access_token = token_req_json.get('access_token')
-    print(access_token)
-    print(code)
     """
     Email Request
     """
@@ -209,7 +207,7 @@ def github_callback(request):
     error = user_json.get("error")
     if error is not None:
         raise JSONDecodeError(error)
-    # print(user_json)
+    print(user_json)
     email = user_json.get("email")
     """
     Signup or Signin Request
